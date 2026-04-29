@@ -822,7 +822,7 @@ footer {
   <div class="hero-content">
     <div class="hero-badge">
       <span class="live-dot"></span>
-      LIVE AGENT · 实时联网搜索
+      LIVE AGENT · DuckDuckGo 实时联网搜索
     </div>
     <h1>让 AI 帮你读懂<br>每一个<em>竞争对手</em></h1>
     <p class="hero-sub">
@@ -865,13 +865,13 @@ footer {
         <div class="step-num">STEP 01</div>
         <div class="step-icon">🔍</div>
         <h3>实时联网搜索</h3>
-        <p>通过 DuckDuckGo 搜索竞品官网、行业报告、媒体评测，获取最新公开信息。</p>
+        <p>通过 DuckDuckGo 实时搜索竞品最新动态、行业报告、媒体评测，获取 2025-2026 年最新公开信息。</p>
       </div>
       <div class="step-card">
         <div class="step-num">STEP 02</div>
         <div class="step-icon">🌐</div>
-        <h3>网页内容抓取</h3>
-        <p>自动访问官网定价页、功能页等关键页面，提取结构化文本内容。</p>
+        <h3>智能内容提取</h3>
+        <p>从搜索结果中提取关键网页内容，整理成结构化信息供 AI 分析。</p>
       </div>
       <div class="step-card">
         <div class="step-num">STEP 03</div>
@@ -906,7 +906,7 @@ footer {
   <div class="section-inner">
     <div class="section-label">自定义分析</div>
     <h2 class="section-title">分析你指定的竞品</h2>
-    <p class="section-desc">填入竞品信息与 API Key，Agent 实时联网搜索，约需 2-3 分钟生成专属报告。</p>
+    <p class="section-desc">填入竞品信息与 API Key，Agent 先进行实时联网搜索（DuckDuckGo），再调用 AI 分析，约需 3-5 分钟生成专属报告。</p>
     <div class="custom-form">
       <div class="form-row">
         <div class="form-group">
@@ -1039,13 +1039,13 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// 自定义分析（直接调OpenAI兼容接口）
+// 自定义分析（联网搜索 + AI 分析）
 async function startAnalysis() {
   const competitors = document.getElementById('input-competitors').value.trim();
   const market = document.getElementById('input-market').value.trim();
   const apiKey = document.getElementById('input-key').value.trim();
   const baseUrl = document.getElementById('input-url').value.trim();
-  const model = document.getElementById('input-model').value.trim() || 'gpt-4o';
+  const model = document.getElementById('input-model').value.trim() || 'moonshot-v1-32k';
 
   if (!competitors || !market) { showToast('请填写竞品名称和赛道'); return; }
   if (!apiKey || !baseUrl) { showToast('请填写 API Key 和 Base URL'); return; }
@@ -1060,272 +1060,25 @@ async function startAnalysis() {
   btn.disabled = true;
   resultSection.classList.add('show');
   resultTitle.textContent = `正在分析：${competitors}`;
-  loadingBar.textContent = `▶ 正在连接 Agent...\n◆ 竞品：${competitors}\n◆ 赛道：${market}\n◆ 模型：${model}\n\n请稍候，报告生成约需 1-3 分钟...`;
+  loadingBar.textContent = `▶ 正在启动联网搜索 Agent...\n◆ 竞品：${competitors}\n◆ 赛道：${market}\n◆ 模型：${model}\n\n请稍候，正在搜索最新信息（约需 2-4 分钟）...`;
   loadingBar.classList.add('show');
   resultBody.innerHTML = '';
   resultSection.scrollIntoView({ behavior: 'smooth' });
 
-  const systemPrompt = `你是一名专业的竞争情报（Competitive Intelligence）分析师。
-
-你的分析基于以下6个核心PM技能框架（来自Lenny的产品技能库）：
-
-## 分析框架参考（来自Lenny PM技能库 + Claude竞品分析框架）
-
-### 【竞品分析核心原则】（Skill #09）
-# 竞品分析
-
-## 何时使用此技能
-
-当你需要：
-- 分析竞争对手和市场格局
-- 找到产品的差异化定位
-- 理解用户的替代方案
-- 评估竞争优势的持久性
-
-## 核心原则
-
-### 1. 从「竞争替代」开始
-定位必须从识别「竞争替代」开始——如果你的产品不存在，客户会做什么。
-
-### 2. 理解行业经济学
-真正的竞争优势需要深入理解底层行业经济关系，而非表面观察。
-
-### 3. 从外部视角出发
-优秀的产品经理始终从客户、市场或竞争对手视角出发，而非内部政治。
-
-### 4. 包括「模拟」替代
-竞品分析应包括传统、非数字的替代方案，而非仅限直接数字竞争对手。
-
-### 5. 竞争包括所有变通方案
-竞争不仅是直接竞争对手，还包括客户目前用来解决问题的任何变通方案或替代品。
-
-## 专家洞察
-
-### April Dunford
-> "良好定位练习的第一步是真正理解：我们需要定位什么？换句话说，就像说：为了赢得交易，我需要打败什么？所以在定位工作中，我们称之为竞争替代。"
-
-**核心洞察**：定位必须从识别「竞争替代」开始——如果你的产品不存在，客户会做什么。
-
-**如何应用**：
-- 识别为了赢得交易需要打败什么
-- 超越直接竞争对手看「竞争替代」
-
----
-
-### Hamilton Helmer
-> "理解是否存在某种类型的力量是困难的……归根结底，困难的部分是行业经济学，真
-
-### 【产品定位分析框架】（Skill #60）
-# 定位与传播
-
-## 何时使用此技能
-
-当你需要：
-- 为产品制定清晰的市场定位
-- 设计能够打动用户的传播信息
-- 解决销售漏斗中的"卡壳"问题
-- 确保团队和客户对产品有一致的理解
-
-## 核心原则
-
-### 1. 定位先于一切
-定位决定了营销的所有其他方面，应该在写代码之前就完成定位练习。
-
-### 2. 传播的真正标准
-有效的沟通不是发送信息，而是确保接收者理解、记住并能复述。
-
-### 3. 品牌是预期设置
-品牌视觉和资产应该成为产品体验的预告，为用户设置正确的期望。
-
-## 专家洞察
-
-### April Dunford
-> "弱定位在销售漏斗的早期就会伤害你——人们真的不明白你是什么，所以他们不会像应该的那样响应你的营销。你会发现漏斗中间出现'卡壳'，特别是如果你有销售人员的话。灯泡不会亮起来..."
-
-**核心洞察**：弱定位会在整个销售漏斗中产生摩擦，从最初的营销响应到销售周期长度。
-
-**如何应用**：
-- 监控销售漏斗中间的"卡壳"现象
-- 留意客户是否在演示时要求销售"退回去重新开始"
-
-### Gina Gotthilf
-> "沟通被持续低估。沟通不是关于能
-
-### 【产品愿景评估】（Skill #04）
-# 产品愿景
-
-## 何时使用此技能
-
-当你需要：
-- 定义或重新定义产品愿景
-- 区分愿景和营销口号
-- 将愿景转化为战略和路线图
-- 在技术限制和用户问题间找到平衡
-
-## 核心原则
-
-### 1. 愿景不是口号
-愿景必须是对公司未来5-10年将变成什么样的具体描述，而非「成为XX的骨干」这样的空话。
-
-### 2. 四要素平衡
-好的愿景必须：宏大（有吸引力）、现实（可达成）、超越当前技术限制、根植于清晰的用户问题。
-
-### 3. 战略是愿景和执行的桥梁
-战略位于使命/愿景和计划之间，强制做出选择以最大化稀缺资源的影响。
-
-### 4. 用熟悉的外壳包装激进愿景
-成功的产品往往将激进的长期愿景包装在用户已经理解和需要的熟悉形态中。
-
-### 5. 内容+体验=完整愿景
-产品愿景应将核心价值（内容/功能）与引人入胜的用户体验结合，帮助用户采取行动。
-
-## 专家洞察
-
-### Meli
-
-### 【北极星指标分析】（Skill #05）
-# 北极星指标
-
-## 何时使用此技能
-
-当你需要：
-- 定义产品或团队的核心成功指标
-- 在复杂生态系统中简化决策
-- 找到可实验的短期指标来预测长期结果
-- 从客户视角定义价值衡量标准
-
-## 核心原则
-
-### 1. 避免用滞后指标做目标
-留存率等滞后指标很难在短期内有意义地推动。找到能预测长期结果的短期输入指标。
-
-### 2. 简化复杂决策
-清晰的高层北极星可以简化复杂、相互关联的产品生态系统中的决策。
-
-### 3. 从客户视角定义指标
-最好的指标从客户视角衡量价值的成功传递，而非内部活动。
-
-### 4. 先定性后定量
-北极星指标在作为定性模型帮助团队对齐价值认知时最有效，然后再添加测量。
-
-### 5. 资源围绕北极星组织
-管理的本质是定义清晰的结果，并组织资源去实现它。
-
-## 专家洞察
-
-### Jess Lachs
-> "留存率是一个糟糕的目标。短期内几乎不可能有意义
-
-### 【路线图优先级判断】（Skill #07）
-# 路线图优先级
-
-## 何时使用此技能
-
-当你需要：
-- 决定下一步应该做什么
-- 在多个需求间排列优先级
-- 制定季度或年度路线图
-- 比较不同团队项目的影响力
-
-## 核心原则
-
-### 1. 结构化模型区分事实与假设
-优先级排序需要创建结构化模型，将已知事实与假设分开，并围绕单一目标凝聚团队。
-
-### 2. 用「季节」适应快速变化
-在快速变化的环境中，用「季节」来对齐团队认知市场变化，而非僵化的长期路线图。
-
-### 3. 滚动更新的长期路线图
-维护一个每六个月更新的滚动两年路线图，保持公司范围的对齐和聚焦。
-
-### 4. 增长模型提供「通用货币」
-增长模型提供「通用货币」来比较不同团队项目在规划期间的影响。
-
-### 5. 明确要求「大想法」
-在规划文档中明确要求「大想法」，防止团队只关注渐进改进。
-
-## 专家洞察
-
-### Alex Hardimen
-> "能够接收所有这
-
-### 【结构化竞品报告框架】（Claude Competitive Analysis Skill）
-# 竞品分析报告 Skill
-
-你是一位资深产品经理，擅长通过系统化的竞品分析为产品决策提供有力支撑。你的分析结合了经典商业分析框架（PEST、商业模式画布、KANO 模型、SWOT 等），能够从宏观行业到微观产品功能进行全方位拆解。
-
-## 核心原则
-
-- **证据驱动**：每一个结论都需要数据或事实支撑，不做无依据的推测
-- **以终为始**：始终围绕"对我方产品决策有什么用"来组织分析，避免为分析而分析
-- **对比出真知**：单看一个竞品没有意义，价值在于横向对比中发现差异和机会
-- **行业自适应**：框架是通用的，但具体分析维度要根据行业特点灵活调整
-
-## 工作流程
-
-### Step 1: 明确分析范围（必须完成后才能进入 Step 2）
-
-**这是硬性门控步骤。在用户明确确认以下三项之前，禁止进行任何搜索或信息收集。** 不要根据自己的判断猜测竞品，不要"先搜搜看再说"——竞品选择权完全在用户手中。
-
-必须逐一确认：
-
-1. **分析模式**：单品拆解还是多品对比？
-   - **单品拆解**：深入分析某一个竞品/产品的完整画像（商业模式、产品能力、战略布局等），不做横向对比。适用于"帮我分析一下 XX"、"拆解一下 XX 的 AI 布局"等场景。
-   - **多品对比**：横向对比多个竞品的差异和优劣，产出对比表格和差异分析。适用于"对比 XX 和 YY"、"分析我们和竞品的差距"等场景。
-   - 判断依据：用户只提了一个分析对象且没有提到"我方"产品 → 大概率是单品拆解；用户提了多个产品或明确了"我方" → 多品对比
-   - **不确定时直接问用户**
-2. **行业/赛道**：用户关注的具体行业是什么？
-3. **分析对象**：
-   - 单品拆解模式 → 确认要拆解的目标产品/公司
-   - 多品对比模式 → 确认我方产品和竞品列表
-
----
-
-
-
-报告格式要求：
-- 以 "# 竞品调研报告：{市场}" 开头
-- 必须包含以下11个章节：
-  ## 一、报告概述（Executive Summary）
-  ## 二、市场与赛道分析（Market Context）（含市场规模、增速、竞争格局、趋势判断，≥3条要点）
-  ## 三、竞品选择与分层（Competitive Landscape）
-  ## 四、核心能力拆解（Product Capability Analysis）（每个竞品用###单独列，含9个字段：产品定位、核心功能、技术特点、定价策略、用户规模、更新节奏、分发渠道、商业模式、近期动态）
-  ## 五、商业模式分析（Monetization）（含收费方式、客单价、付费转化路径，≥3条要点）
-  ## 六、增长与分发策略（Growth Strategy）
-  ## 七、用户与场景分析（User & Use Case）
-  ## 八、优劣势对比（SWOT / 对比矩阵）（每个竞品各列：优势≥3、劣势≥3、机会≥2、威胁≥2）
-  ## 九、关键差异与壁垒（Moat Analysis）
-  ## 十、机会点与策略建议（Opportunities）（≥3条可执行建议）
-  ## 十一、数据附录（Appendix）
-- 使用表格对比关键数据
-- 总字数不少于4000字
-- 每个判断有数据或事实支撑`;
-
-  const userMsg = `请对以下竞争对手进行全面分析，生成专业竞争情报报告：
-
-**竞争对手：** ${competitors}
-**市场/产品类别：** ${market}
-**地理范围：** 中国市场为主
-
-请直接输出完整报告。`;
-
   try {
-    const url = baseUrl.endsWith('/') ? baseUrl + 'chat/completions' : baseUrl + '/chat/completions';
-    const resp = await fetch(url, {
+    // 调用后端 API（联网搜索 + AI 分析）
+    const resp = await fetch('/api/analyze', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: model,
-        max_tokens: 16384,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userMsg }
-        ],
-        stream: true
-      })
+        competitors,
+        market,
+        apiKey,
+        baseUrl,
+        model,
+      }),
     });
 
     if (!resp.ok) {
@@ -1333,27 +1086,48 @@ async function startAnalysis() {
       throw new Error(`API 错误 ${resp.status}: ${err}`);
     }
 
-    loadingBar.classList.remove('show');
-    resultTitle.textContent = `📊 分析结果：${competitors}`;
-
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
     let fullText = '';
+    let isFirstContent = true;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+
       const chunk = decoder.decode(value);
-      const lines = chunk.split('\n').filter(l => l.startsWith('data: '));
+      const lines = chunk.split('\n').filter(l => l.trim());
+
       for (const line of lines) {
-        const data = line.slice(6);
-        if (data === '[DONE]') break;
-        try {
-          const j = JSON.parse(data);
-          const delta = j.choices?.[0]?.delta?.content || '';
-          fullText += delta;
-          resultBody.innerHTML = marked.parse(fullText + '▌');
-        } catch {}
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          try {
+            const parsed = JSON.parse(data);
+
+            if (parsed.type === 'status') {
+              loadingBar.textContent = `▶ ${parsed.message}\n\n请稍候...`;
+            } else if (parsed.type === 'progress') {
+              loadingBar.textContent += `\n✓ 搜索: ${parsed.query} (${parsed.found} 条结果)`;
+            } else if (parsed.type === 'content') {
+              if (isFirstContent) {
+                loadingBar.classList.remove('show');
+                resultTitle.textContent = `📊 分析结果：${competitors}`;
+                isFirstContent = false;
+              }
+              fullText += parsed.content;
+              resultBody.innerHTML = marked.parse(fullText + '▌');
+              // 自动滚动到底部
+              resultBody.scrollTop = resultBody.scrollHeight;
+            } else if (parsed.type === 'error') {
+              throw new Error(parsed.message);
+            } else if (parsed.type === 'done') {
+              resultBody.innerHTML = marked.parse(fullText);
+              showToast('✅ 报告生成完成！');
+            }
+          } catch (e) {
+            // 忽略解析错误
+          }
+        }
       }
     }
 
@@ -1362,7 +1136,8 @@ async function startAnalysis() {
 
   } catch (e) {
     loadingBar.textContent = `❌ 出错了：${e.message}`;
-    showToast('生成失败，请检查 API 配置');
+    showToast('生成失败，请检查 API 配置和网络连接');
+    console.error(e);
   }
 
   btn.textContent = '🚀 开始分析';
