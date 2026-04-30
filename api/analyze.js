@@ -1,14 +1,9 @@
 // Vercel Serverless Function - 联网搜索 + AI 分析
 // 使用 DuckDuckGo 搜索获取最新信息，然后调用 AI 生成报告
 
-export const config = {
-  runtime: 'edge',
-};
-
 // 简单的 DuckDuckGo 搜索实现
 async function duckDuckGoSearch(query, maxResults = 5) {
   try {
-    // 使用 DuckDuckGo 的 HTML 版本搜索
     const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
 
     const response = await fetch(searchUrl, {
@@ -27,8 +22,8 @@ async function duckDuckGoSearch(query, maxResults = 5) {
 
     // 解析搜索结果
     const results = [];
-    const resultRegex = /<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g;
-    const snippetRegex = /<a[^>]*class="result__snippet"[^>]*>(.*?)<\/a>/g;
+    const resultRegex = /result__a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/g;
+    const snippetRegex = /result__snippet[^>]*>(.*?)<\/a>/g;
 
     let match;
     let snippetMatch;
@@ -39,14 +34,12 @@ async function duckDuckGoSearch(query, maxResults = 5) {
     // 提取链接和标题
     while ((match = resultRegex.exec(html)) !== null && links.length < maxResults) {
       let url = match[1];
-      // 处理 DuckDuckGo 的重定向链接
       if (url.startsWith('//')) {
         url = 'https:' + url;
       } else if (url.startsWith('/')) {
         url = 'https://duckduckgo.com' + url;
       }
 
-      // 解码 URL
       if (url.includes('uddg=')) {
         const encoded = url.match(/uddg=([^&]+)/);
         if (encoded) {
@@ -55,7 +48,6 @@ async function duckDuckGoSearch(query, maxResults = 5) {
       }
 
       links.push(url);
-      // 清理标题中的 HTML 标签
       const title = match[2].replace(/<[^>]+>/g, '');
       titles.push(title);
     }
@@ -85,12 +77,17 @@ async function duckDuckGoSearch(query, maxResults = 5) {
 // 获取网页内容
 async function fetchPageContent(url, maxLength = 3000) {
   try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
-      signal: AbortSignal.timeout(10000), // 10秒超时
+      signal: controller.signal,
     });
+
+    clearTimeout(timeout);
 
     if (!response.ok) {
       return null;
@@ -98,7 +95,7 @@ async function fetchPageContent(url, maxLength = 3000) {
 
     const html = await response.text();
 
-    // 简单的内容提取 - 移除脚本和样式
+    // 简单的内容提取
     let text = html
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -106,7 +103,6 @@ async function fetchPageContent(url, maxLength = 3000) {
       .replace(/\s+/g, ' ')
       .trim();
 
-    // 限制长度
     if (text.length > maxLength) {
       text = text.substring(0, maxLength) + '...';
     }
@@ -118,97 +114,85 @@ async function fetchPageContent(url, maxLength = 3000) {
   }
 }
 
-// 主处理函数
-export default async function handler(request) {
+// Vercel Serverless Function 处理器
+module.exports = async (req, res) => {
   // 设置 CORS 头
-  const corsHeaders = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-  };
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
-  if (request.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
   }
 
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: corsHeaders,
-    });
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
   }
 
   try {
-    const { competitors, market, apiKey, baseUrl, model } = await request.json();
+    const { competitors, market, apiKey, baseUrl, model } = req.body;
 
     if (!competitors || !market || !apiKey || !baseUrl || !model) {
-      return new Response(JSON.stringify({ error: 'Missing required parameters' }), {
-        status: 400,
-        headers: corsHeaders,
+      res.status(400).json({ error: 'Missing required parameters' });
+      return;
+    }
+
+    // 设置 SSE 头
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const sendEvent = (data) => {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+
+    // 步骤 1: 发送开始消息
+    sendEvent({ type: 'status', message: '🔍 正在搜索最新信息...' });
+
+    // 步骤 2: 执行多个搜索查询
+    const searchQueries = [
+      `${competitors} ${market} 2026`,
+      `${competitors} ${market} 2025`,
+      `${competitors} ${market} 最新`,
+      `${competitors.split(/[,，、]/)[0]} 产品功能 2026`,
+      `${competitors.split(/[,，、]/)[0]} 官网`,
+    ];
+
+    let allSearchResults = [];
+    for (const query of searchQueries) {
+      const results = await duckDuckGoSearch(query, 3);
+      allSearchResults = allSearchResults.concat(results);
+      sendEvent({ type: 'progress', query, found: results.length });
+    }
+
+    // 去重
+    allSearchResults = allSearchResults.filter(
+      (item, index, self) => index === self.findIndex((t) => t.link === item.link)
+    ).slice(0, 10);
+
+    // 步骤 3: 获取部分网页内容
+    sendEvent({ type: 'status', message: '📄 正在抓取网页内容...' });
+
+    const enrichedResults = [];
+    for (const result of allSearchResults.slice(0, 5)) {
+      const content = await fetchPageContent(result.link, 2000);
+      enrichedResults.push({
+        ...result,
+        content: content || result.snippet,
       });
     }
 
-    // 创建流式响应
-    const stream = new TransformStream();
-    const writer = stream.writable.getWriter();
-    const encoder = new TextEncoder();
+    // 步骤 4: 构建搜索上下文
+    const searchContext = enrichedResults
+      .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.link}\n内容: ${r.content}\n`)
+      .join('\n---\n');
 
-    // 异步处理搜索和AI调用
-    (async () => {
-      try {
-        // 步骤 1: 发送开始消息
-        await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ type: 'status', message: '🔍 正在搜索最新信息...' })}\n\n`)
-        );
+    sendEvent({ type: 'status', message: '🤖 正在生成报告...' });
 
-        // 步骤 2: 执行多个搜索查询
-        const searchQueries = [
-          `${competitors} ${market} 2026`,
-          `${competitors} ${market} 2025`,
-          `${competitors} ${market} 最新`,
-          `${competitors.split(/[,，、]/)[0]} 产品功能 2026`,
-          `${competitors.split(/[,，、]/)[0]} 官网`,
-        ];
-
-        let allSearchResults = [];
-        for (const query of searchQueries) {
-          const results = await duckDuckGoSearch(query, 3);
-          allSearchResults = allSearchResults.concat(results);
-          await writer.write(
-            encoder.encode(`data: ${JSON.stringify({ type: 'progress', query, found: results.length })}\n\n`)
-          );
-        }
-
-        // 去重
-        allSearchResults = allSearchResults.filter(
-          (item, index, self) => index === self.findIndex((t) => t.link === item.link)
-        ).slice(0, 10);
-
-        // 步骤 3: 获取部分网页内容
-        await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ type: 'status', message: '📄 正在抓取网页内容...' })}\n\n`)
-        );
-
-        const enrichedResults = [];
-        for (const result of allSearchResults.slice(0, 5)) {
-          const content = await fetchPageContent(result.link, 2000);
-          enrichedResults.push({
-            ...result,
-            content: content || result.snippet,
-          });
-        }
-
-        // 步骤 4: 构建搜索上下文
-        const searchContext = enrichedResults
-          .map((r, i) => `[${i + 1}] ${r.title}\nURL: ${r.link}\n内容: ${r.content}\n`)
-          .join('\n---\n');
-
-        await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ type: 'status', message: '🤖 正在生成报告...' })}\n\n`)
-        );
-
-        // 步骤 5: 调用 AI 生成报告
-        const systemPrompt = `你是一名专业的竞争情报分析师。
+    // 步骤 5: 调用 AI 生成报告
+    const systemPrompt = `你是一名专业的竞争情报分析师。
 
 分析基于以下6个核心PM技能框架：
 
@@ -244,7 +228,7 @@ export default async function handler(request) {
 - 总字数不少于4000字
 - 每个判断有数据或事实支撑`;
 
-        const userMsg = `请对以下竞争对手进行全面分析，生成专业竞争情报报告：
+    const userMsg = `请对以下竞争对手进行全面分析，生成专业竞争情报报告：
 
 **竞争对手：** ${competitors}
 **市场/产品类别：** ${market}
@@ -266,87 +250,67 @@ ${searchContext}
 
 请直接输出完整报告。`;
 
-        // 调用 AI API
-        const apiUrl = baseUrl.endsWith('/') ? baseUrl + 'chat/completions' : baseUrl + '/chat/completions';
+    // 调用 AI API
+    const apiUrl = baseUrl.endsWith('/') ? baseUrl + 'chat/completions' : baseUrl + '/chat/completions';
 
-        const aiResponse = await fetch(apiUrl, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: model,
-            max_tokens: 16384,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userMsg },
-            ],
-            stream: true,
-          }),
-        });
+    const aiResponse = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: model,
+        max_tokens: 16384,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userMsg },
+        ],
+        stream: true,
+      }),
+    });
 
-        if (!aiResponse.ok) {
-          const error = await aiResponse.text();
-          throw new Error(`AI API 错误: ${error}`);
-        }
+    if (!aiResponse.ok) {
+      const error = await aiResponse.text();
+      throw new Error(`AI API 错误: ${error}`);
+    }
 
-        // 转发 AI 流式响应
-        const reader = aiResponse.body.getReader();
-        const decoder = new TextDecoder();
+    // 转发 AI 流式响应
+    const reader = aiResponse.body.getReader();
+    const decoder = new TextDecoder();
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n').filter((l) => l.trim());
+      const chunk = decoder.decode(value);
+      const lines = chunk.split('\n').filter((l) => l.trim());
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') continue;
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
 
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || '';
-                if (content) {
-                  await writer.write(
-                    encoder.encode(`data: ${JSON.stringify({ type: 'content', content })}\n\n`)
-                  );
-                }
-              } catch (e) {
-                // 忽略解析错误
-              }
+          try {
+            const parsed = JSON.parse(data);
+            const content = parsed.choices?.[0]?.delta?.content || '';
+            if (content) {
+              sendEvent({ type: 'content', content });
             }
+          } catch (e) {
+            // 忽略解析错误
           }
         }
-
-        // 发送完成信号
-        await writer.write(encoder.encode(`data: ${JSON.stringify({ type: 'done' })}\n\n`));
-      } catch (error) {
-        console.error('处理错误:', error);
-        await writer.write(
-          encoder.encode(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`)
-        );
-      } finally {
-        await writer.close();
       }
-    })();
+    }
 
-    return new Response(stream.readable, {
-      headers: {
-        ...corsHeaders,
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive',
-      },
-    });
+    // 发送完成信号
+    sendEvent({ type: 'done' });
+    res.end();
+
   } catch (error) {
-    console.error('请求处理错误:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    console.error('处理错误:', error);
+    res.write(`data: ${JSON.stringify({ type: 'error', message: error.message })}\n\n`);
+    res.end();
   }
-}
+};
