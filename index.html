@@ -1039,16 +1039,24 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// 自定义分析（联网搜索 + AI 分析）
+// Railway 后端域名
+const RAILWAY_URL = 'https://web-production-4c183.up.railway.app';
+
+// 自定义分析（调用Railway后端，真实联网搜索）
 async function startAnalysis() {
   const competitors = document.getElementById('input-competitors').value.trim();
   const market = document.getElementById('input-market').value.trim();
   const apiKey = document.getElementById('input-key').value.trim();
   const baseUrl = document.getElementById('input-url').value.trim();
-  const model = document.getElementById('input-model').value.trim() || 'moonshot-v1-32k';
+  const model = document.getElementById('input-model').value.trim() || 'gpt-4o';
 
   if (!competitors || !market) { showToast('请填写竞品名称和赛道'); return; }
   if (!apiKey || !baseUrl) { showToast('请填写 API Key 和 Base URL'); return; }
+  if (RAILWAY_URL.includes('YOUR-APP')) {
+    showToast('请先配置后端地址');
+    alert('请打开 index.html，把 RAILWAY_URL 改成你的 Railway 域名！');
+    return;
+  }
 
   const btn = document.getElementById('analyze-btn');
   const resultSection = document.getElementById('result-section');
@@ -1060,84 +1068,78 @@ async function startAnalysis() {
   btn.disabled = true;
   resultSection.classList.add('show');
   resultTitle.textContent = `正在分析：${competitors}`;
-  loadingBar.textContent = `▶ 正在启动联网搜索 Agent...\n◆ 竞品：${competitors}\n◆ 赛道：${market}\n◆ 模型：${model}\n\n请稍候，正在搜索最新信息（约需 2-4 分钟）...`;
+  loadingBar.textContent = `▶ Agent 启动中...\n◆ 竞品：${competitors}\n◆ 赛道：${market}\n◆ 模型：${model}\n\n正在联网搜索，约需 2-4 分钟...`;
   loadingBar.classList.add('show');
   resultBody.innerHTML = '';
   resultSection.scrollIntoView({ behavior: 'smooth' });
 
   try {
-    // 调用后端 API（联网搜索 + AI 分析）
-    const resp = await fetch('/api/analyze', {
+    const resp = await fetch(`${RAILWAY_URL}/api/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         competitors,
         market,
-        apiKey,
-        baseUrl,
+        api_key: apiKey,
+        base_url: baseUrl,
         model,
       }),
     });
 
     if (!resp.ok) {
       const err = await resp.text();
-      throw new Error(`API 错误 ${resp.status}: ${err}`);
+      throw new Error(`后端错误 ${resp.status}: ${err}`);
     }
 
     const reader = resp.body.getReader();
     const decoder = new TextDecoder();
-    let fullText = '';
-    let isFirstContent = true;
+    let reportContent = '';
+    let buffer = '';
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value);
-      const lines = chunk.split('\n').filter(l => l.trim());
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop(); // 保留未完整的行
 
       for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const data = line.slice(6);
-          try {
-            const parsed = JSON.parse(data);
+        if (!line.startsWith('data: ')) continue;
+        const raw = line.slice(6).trim();
+        if (!raw) continue;
 
-            if (parsed.type === 'status') {
-              loadingBar.textContent = `▶ ${parsed.message}\n\n请稍候...`;
-            } else if (parsed.type === 'progress') {
-              loadingBar.textContent += `\n✓ 搜索: ${parsed.query} (${parsed.found} 条结果)`;
-            } else if (parsed.type === 'content') {
-              if (isFirstContent) {
-                loadingBar.classList.remove('show');
-                resultTitle.textContent = `📊 分析结果：${competitors}`;
-                isFirstContent = false;
-              }
-              fullText += parsed.content;
-              resultBody.innerHTML = marked.parse(fullText + '▌');
-              // 自动滚动到底部
-              resultBody.scrollTop = resultBody.scrollHeight;
-            } else if (parsed.type === 'error') {
-              throw new Error(parsed.message);
-            } else if (parsed.type === 'done') {
-              resultBody.innerHTML = marked.parse(fullText);
+        try {
+          const msg = JSON.parse(raw);
+
+          if (msg.type === 'log') {
+            loadingBar.textContent += '\n' + msg.text;
+            loadingBar.scrollTop = loadingBar.scrollHeight;
+
+          } else if (msg.type === 'report') {
+            loadingBar.classList.remove('show');
+            resultTitle.textContent = `📊 分析结果：${competitors}`;
+            reportContent = msg.content;
+            resultBody.innerHTML = marked.parse(reportContent);
+
+          } else if (msg.type === 'error') {
+            throw new Error(msg.text);
+
+          } else if (msg.type === 'done') {
+            if (reportContent) {
+              resultBody.innerHTML = marked.parse(reportContent);
               showToast('✅ 报告生成完成！');
             }
-          } catch (e) {
-            // 忽略解析错误
           }
+        } catch (parseErr) {
+          // 跳过解析失败的行
         }
       }
     }
 
-    resultBody.innerHTML = marked.parse(fullText);
-    showToast('✅ 报告生成完成！');
-
   } catch (e) {
-    loadingBar.textContent = `❌ 出错了：${e.message}`;
-    showToast('生成失败，请检查 API 配置和网络连接');
-    console.error(e);
+    loadingBar.textContent += `\n\n❌ 出错了：${e.message}`;
+    showToast('生成失败，请检查配置');
   }
 
   btn.textContent = '🚀 开始分析';
